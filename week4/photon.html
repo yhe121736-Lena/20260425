@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    body { margin: 0; background: #050514; overflow: hidden; color: #00ff96; font-family: monospace; }
+    .ui { position: absolute; top: 10px; left: 10px; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div class="ui">
+    <h2 style="color: #00f2ff;">PHOTON DECODER</h2>
+    <div style="color: rgba(0, 242, 255, 0.7); font-size: 0.9em;">
+      [ FREQ_MODE: MANUAL ]<br>
+      MATCH THE ENCRYPTED WAVEFORM
+    </div>
+    <div id="progress" style="font-size: 1.2em; margin-top: 5px;">DECODING: 0%</div>
+  </div>
+  <script>
+    let targetFreq, targetAmp;
+    let progress = 0;
+    let hasScored = false; // 避免在顯示成功訊息期間重複加分
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      noCursor();
+      newTarget();
+    }
+
+    function newTarget() {
+      targetFreq = random(0.02, 0.08);
+      targetAmp = random(30, 120);
+    }
+
+    function draw() {
+      background(5, 5, 25);
+      
+      // 滑鼠控制玩家波形
+      let currentFreq = map(mouseX, 0, width, 0.01, 0.1);
+      let currentAmp = map(mouseY, height, 0, 20, 150);
+
+      // 繪製背景裝飾網格
+      stroke(0, 242, 255, 15);
+      for(let i=0; i<width; i+=50) line(i, 0, i, height);
+      for(let j=0; j<height; j+=50) line(0, j, width, j);
+
+      // 繪製進度條背景
+      noStroke();
+      fill(0, 50, 100, 100);
+      rect(20, height - 30, width - 40, 10, 5);
+      
+      // 繪製當前匹配進度條
+      fill(0, 255, 150, 200);
+      rect(20, height - 30, map(progress, 0, 100, 0, width - 40), 10, 5);
+
+      // 繪製目標信號 (紅色波形)
+      noFill();
+      stroke(255, 0, 85, 120);
+      strokeWeight(2);
+      beginShape();
+      for(let x=0; x<width; x+=5) {
+        let y = height/2 + sin(x * targetFreq + frameCount*0.05) * targetAmp;
+        vertex(x, y);
+      }
+      endShape();
+
+      // 繪製玩家解碼波形 (青色，帶有發光感)
+      stroke(0, 242, 255, 200);
+      strokeWeight(3);
+      beginShape();
+      for(let x=0; x<width; x+=5) {
+        let y = height/2 + sin(x * currentFreq + frameCount*0.05) * currentAmp;
+        vertex(x, y);
+      }
+      endShape();
+
+      // 檢查匹配邏輯
+      let matchFactor = 1 - (abs(currentFreq - targetFreq) / 0.1 + abs(currentAmp - targetAmp) / 150);
+      if (matchFactor > 0.92) {
+        progress += 0.6;
+        // 成功匹配時的視覺干擾
+        if (frameCount % 4 === 0) {
+          fill(0, 255, 150, 20);
+          rect(0, 0, width, height);
+        }
+        document.getElementById('progress').innerText = "DECODING: " + floor(progress) + "% - SIGNAL LOCKED";
+        document.getElementById('progress').style.color = "#00ff96";
+      } else {
+        if (progress > 0) progress -= 0.15;
+        document.getElementById('progress').innerText = "DECODING: " + floor(progress) + "% - SEARCHING...";
+        document.getElementById('progress').style.color = "#ff0055";
+      }
+
+      if (progress >= 100) {
+        if (!hasScored) {
+          // 解碼成功，一次加 500 分
+          window.parent.postMessage({ type: 'ADD_SCORE', amount: 500 }, '*');
+          hasScored = true;
+        }
+        fill(0, 255, 150);
+        textAlign(CENTER);
+        textSize(40);
+        text("SIGNAL DECODED", width/2, height/2);
+        if (frameCount % 180 === 0) {
+          progress = 0;
+          hasScored = false;
+          newTarget();
+        }
+      }
+
+      drawMouseCursor();
+    }
+
+    function drawMouseCursor() {
+      push();
+      translate(mouseX, mouseY);
+      rotate(frameCount * 0.02);
+      noFill();
+      stroke(0, 242, 255, 200);
+      strokeWeight(2);
+      ellipse(0, 0, 40, 40);
+      line(-25, 0, -15, 0);
+      line(25, 0, 15, 0);
+      line(0, -25, 0, -15);
+      line(0, 25, 0, 15);
+      rotate(-frameCount * 0.05);
+      strokeWeight(1);
+      arc(0, 0, 55, 55, 0, PI/2);
+      arc(0, 0, 55, 55, PI, 3*PI/2);
+      pop();
+    }
+
+    function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+  </script>
+</body>
+</html>

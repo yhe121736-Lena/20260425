@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    body { margin: 0; background: #050514; overflow: hidden; color: #00f2ff; font-family: monospace; }
+    .ui { position: absolute; top: 10px; left: 10px; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div class="ui">
+    <h2>QUANTUM GRAVITY MATRIX</h2>
+    <div style="display: flex; gap: 20px; align-items: center;">
+      <div id="score">SCORE: 0</div>
+      <div id="stability">STABILITY: 100%</div>
+    </div>
+    <div id="status">STATUS: STABLE</div>
+  </div>
+  <script>
+    let nodes = [];
+    let score = 0;
+    let gameOver = false;
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      noCursor(); // 隱藏原生滑鼠
+      for (let i = 0; i < 4; i++) {
+        for (let j = 0; j < 4; j++) {
+          nodes.push(new QuantumNode(i * 100 + width/2 - 150, j * 100 + height/2 - 150));
+        }
+      }
+    }
+
+    function draw() {
+      background(5, 5, 20);
+      if (gameOver) {
+        fill(255, 0, 0);
+        textAlign(CENTER);
+        textFont('monospace');
+        textSize(32);
+        text("MATRIX COLLAPSED", width/2, height/2);
+        textSize(16);
+        text("CLICK TO RESTART", width/2, height/2 + 40);
+        return;
+      }
+
+      nodes.forEach(n => {
+        n.update();
+        n.display();
+        if (n.active) {
+          let stability = floor(map(n.instability, 0, 255, 100, 0));
+          document.getElementById('stability').innerText = "STABILITY: " + stability + "%";
+          if (n.instability >= 255) gameOver = true;
+        }
+      });
+
+      if (frameCount % 60 === 0 && !gameOver) {
+        let inactive = nodes.filter(n => !n.active);
+        if (inactive.length > 0) random(inactive).activate();
+      }
+
+      drawMouseCursor(); // 在遊戲內也繪製一樣的準星
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    function drawMouseCursor() {
+      push();
+      translate(mouseX, mouseY);
+      rotate(frameCount * 0.02);
+      noFill();
+      stroke(0, 242, 255, 200);
+      strokeWeight(2);
+      ellipse(0, 0, 40, 40);
+      line(-25, 0, -15, 0);
+      line(25, 0, 15, 0);
+      line(0, -25, 0, -15);
+      line(0, 25, 0, 15);
+      rotate(-frameCount * 0.05);
+      strokeWeight(1);
+      arc(0, 0, 55, 55, 0, PI/2);
+      arc(0, 0, 55, 55, PI, 3*PI/2);
+      pop();
+    }
+
+    function mousePressed() {
+      if (gameOver) {
+        score = 0;
+        gameOver = false;
+        nodes.forEach(n => n.reset());
+        return;
+      }
+      nodes.forEach(n => {
+        if (n.active && dist(mouseX, mouseY, n.x, n.y) < 40) {
+          n.reset();
+          score += 100;
+          // 發送訊號給主程式
+          window.parent.postMessage({ type: 'ADD_SCORE', amount: 100 }, '*');
+          document.getElementById('score').innerText = "SCORE: " + score;
+        }
+      });
+    }
+
+    class QuantumNode {
+      constructor(x, y) {
+        this.x = x; this.y = y;
+        this.id = "0x" + hex(floor(random(65535)), 4);
+        this.reset();
+      }
+      reset() {
+        this.active = false;
+        this.instability = 0;
+        document.getElementById('stability').innerText = "STABILITY: 100%";
+      }
+      activate() {
+        this.active = true;
+      }
+      update() {
+        if (this.active) this.instability += 1.8 + (score / 1500);
+      }
+      display() {
+        noFill();
+        stroke(0, 242, 255, 50);
+        rectMode(CENTER);
+        rect(this.x, this.y, 80, 80);
+        fill(0, 242, 255, 30);
+        textSize(10);
+        textAlign(LEFT);
+        text(this.id, this.x - 35, this.y - 45);
+        if (this.active) {
+          fill(this.instability, 255 - this.instability, 150);
+          ellipse(this.x, this.y, 40 + sin(frameCount * 0.2) * 10);
+          fill(255, 0, 0, this.instability);
+          text("CRITICAL", this.x - 25, this.y + 55);
+        } else {
+          fill(0, 50, 50);
+          ellipse(this.x, this.y, 10);
+        }
+      }
+    }
+  </script>
+</body>
+</html>

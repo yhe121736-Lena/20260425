@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>員工生物特徵辨識系統</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; padding: 0; background: #050514; color: #00f2ff; font-family: 'Share Tech Mono', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+    .status-panel { position: absolute; top: 20px; left: 20px; border: 1px solid #00f2ff; background: rgba(0, 242, 255, 0.1); padding: 15px; pointer-events: none; z-index: 10; }
+    canvas { border: 2px solid #00f2ff; box-shadow: 0 0 30px rgba(0, 242, 255, 0.3); }
+  </style>
+</head>
+<body>
+  <div class="status-panel">
+    <div style="font-family: 'Orbitron'; font-weight: bold; margin-bottom: 5px;">BIO-SCANNER V4.0</div>
+    <div id="status">正在初始化核心...</div>
+    <div id="details">目標：未鎖定</div>
+  </div>
+  <script>
+    let faceMesh;
+    let video;
+    let faces = [];
+    let options = { maxFaces: 1, refineLandmarks: false, flipHorizontal: true };
+    let scanLineY = 0;
+    
+    // 平滑化濾鏡變數
+    let smoothedKeypoints = [];
+    let smoothedBox = { xMin: 0, yMin: 0, width: 0, height: 0 };
+    let lerpFactor = 0.15; // 平滑係數：越小越平滑但反應越慢 (建議值 0.1 ~ 0.3)
+
+    // 數位雨相關變數
+    let symbolSize = 18;
+    let streams = [];
+    let isAuthorized = false;
+    let hasPlayedSound = false; // 用於確保語音只播放一次
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+
+      // 重寫：影片與模型同步啟動
+      video = createCapture(VIDEO, () => {
+        faceMesh = ml5.faceMesh(options, () => {
+          console.log("偵測啟動");
+          faceMesh.detectStart(video.elt, gotFaces);
+        });
+      });
+
+      video.size(640, 480);
+      video.hide();
+
+      // 初始化數位雨串流
+      let x = 0;
+      for (let i = 0; i <= width / symbolSize; i++) {
+        let stream = new Stream();
+        stream.generateSymbols(x, random(-1000, 0));
+        streams.push(stream);
+        x += symbolSize;
+      }
+    }
+
+    function gotFaces(results) {
+      faces = results;
+    }
+
+    function draw() {
+      background(5, 5, 20);
+      
+      // 1. 繪製攝影機畫面 (水平翻轉使其像鏡子)
+      push();
+      translate(width, 0);
+      scale(-1, 1);
+      image(video, 0, 0, width, height);
+      
+      // 寫實化：加入感測器暗角與色偏
+      let ctx = drawingContext;
+      let vGrad = ctx.createRadialGradient(width/2, height/2, width*0.2, width/2, height/2, width*0.8);
+      vGrad.addColorStop(0, 'rgba(0, 242, 255, 0.05)');
+      vGrad.addColorStop(1, 'rgba(0, 10, 20, 0.6)');
+      ctx.fillStyle = vGrad;
+      noStroke();
+      rect(0, 0, width, height);
+      pop();
+
+      // 新增：數位噪點 (Film Grain)
+      if (frameCount % 2 === 0) {
+        for (let i = 0; i < 200; i++) {
+          stroke(255, 15);
+          point(random(width), random(height));
+        }
+      }
+
+      // 2. 繪製數位雨
+      textSize(symbolSize);
+      streams.forEach(stream => stream.render());
+
+      // 3. 繪製動態掃描線
+      stroke(0, 242, 255, 150);
+      strokeWeight(2);
+      line(0, scanLineY, width, scanLineY);
+      scanLineY = (scanLineY + 5) % height;
+
+      // 4. 繪製 UI 裝飾框
+      drawUI();
+
+      if (faces.length > 0) {
+        // 如果偵測到人臉且尚未播放過音效
+        if (!hasPlayedSound) {
+          playVoice("Identity confirmed. Access granted.");
+          hasPlayedSound = true;
+        }
+
+        isAuthorized = true;
+        let face = faces[0];
+        document.getElementById('status').innerText = "狀態：辨識中...";
+        document.getElementById('status').style.color = "#ffff00";
+
+        // 取得臉部範圍 (增加相容性檢查)
+        let box = face.box || face.bounds;
+        if (box) {
+          // 1. 平滑處理邊框座標 (lerp 運算)
+          smoothedBox.xMin = lerp(smoothedBox.xMin, box.xMin, lerpFactor);
+          smoothedBox.yMin = lerp(smoothedBox.yMin, box.yMin, lerpFactor);
+          smoothedBox.width = lerp(smoothedBox.width, box.width, lerpFactor);
+          smoothedBox.height = lerp(smoothedBox.height, box.height, lerpFactor);
+
+          // 將座標從影像原始尺寸 (640x480) 映射到當前畫布寬高
+          let x = map(smoothedBox.xMin, 0, 640, 0, width);
+          let y = map(smoothedBox.yMin, 0, 480, 0, height);
+          let w = map(smoothedBox.width, 0, 640, 0, width);
+          let h = map(smoothedBox.height, 0, 480, 0, height);
+
+          noFill();
+          stroke(0, 255, 150);
+          strokeWeight(2);
+          rect(x, y, w, h);
+          
+          // 角落裝飾
+          strokeWeight(4);
+          line(x, y, x + 20, y);
+          line(x, y, x, y + 20);
+          line(x + w, y + h, x + w - 20, y + h);
+          line(x + w, y + h, x + w, y + h - 20);
+
+          // 2. 平滑處理特徵點座標
+          if (smoothedKeypoints.length !== face.keypoints.length) {
+            // 第一次偵測到人臉，直接初始化座標
+            smoothedKeypoints = face.keypoints.map(kp => ({ x: kp.x, y: kp.y }));
+          } else {
+            // 後續影格：將平滑點向原始點「推進」
+            for (let i = 0; i < face.keypoints.length; i++) {
+              smoothedKeypoints[i].x = lerp(smoothedKeypoints[i].x, face.keypoints[i].x, lerpFactor);
+              smoothedKeypoints[i].y = lerp(smoothedKeypoints[i].y, face.keypoints[i].y, lerpFactor);
+            }
+          }
+
+          // 繪製臉部網格線 (Mesh) 與特徵點 (改用 smoothedKeypoints)
+          for (let i = 0; i < smoothedKeypoints.length; i++) {
+            let kp = smoothedKeypoints[i];
+            let kpx = map(kp.x, 0, 640, 0, width);
+            let kpy = map(kp.y, 0, 480, 0, height);
+
+            // 額外細節：在鼻樑點繪製掃描環
+            if (i === 5) {
+               noFill();
+               stroke(0, 255, 150, 150 + sin(frameCount*0.2)*100);
+               circle(kpx, kpy, 60 + sin(frameCount*0.1)*20);
+            }
+
+            // 繪製點
+            fill(0, 255, 150, 200);
+            noStroke();
+            ellipse(kpx, kpy, 2.5, 2.5);
+
+            // 繪製連線：檢查鄰近的點並連線，形成網格感
+            stroke(0, 255, 150, 40); // 設置極淡的綠色線條
+            strokeWeight(0.5);
+            for (let j = 1; j < 5; j++) { // 檢查接下來的幾個點
+              let nextIdx = i + j;
+              if (nextIdx < face.keypoints.length) {
+                let p2 = smoothedKeypoints[nextIdx];
+                let p2x = map(p2.x, 0, 640, 0, width);
+                let p2y = map(p2.y, 0, 480, 0, height);
+                // 只連接距離較近的點，避免產生跨越臉部的大長線
+                if (dist(kpx, kpy, p2x, p2y) < 25) {
+                  line(kpx, kpy, p2x, p2y);
+                }
+              }
+            }
+          }
+
+          // 辨識成功文字
+          fill(0, 255, 150);
+          noStroke();
+          textSize(24);
+          textAlign(CENTER);
+          text("IDENTIFIED: AUTHORIZED CREW", width/2, y - 20); 
+          
+          textSize(40);
+          fill(0, 255, 150, 150 + sin(frameCount * 0.1) * 100);
+          text("ACCESS GRANTED", width/2, height/2);
+          
+          document.getElementById('details').innerText = "目標：權限已核准";
+          document.getElementById('status').innerText = "狀態：辨識成功";
+          document.getElementById('status').style.color = "#00ff96";
+        }
+      } else {
+        isAuthorized = false;
+        document.getElementById('status').innerText = "狀態：等待目標...";
+        document.getElementById('status').style.color = "#ff3300";
+        document.getElementById('details').innerText = "目標：未鎖定";
+        hasPlayedSound = false; // 當人臉離開畫面，重置播放狀態
+      }
+    }
+
+    function drawUI() {
+      noFill();
+      stroke(0, 242, 255, 80);
+      strokeWeight(1);
+      // 十字瞄準線
+      line(width/2 - 20, height/2, width/2 + 20, height/2);
+      line(width/2, height/2 - 20, width/2, height/2 + 20);
+      
+      // 四角裝飾
+      rect(10, 10, 50, 50);
+      rect(width-60, 10, 50, 50);
+      rect(10, height-60, 50, 50);
+      rect(width-60, height-60, 50, 50);
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    // 新增：播放科幻語音函數
+    function playVoice(txt) {
+      // 先取消正在排隊的語音，避免重疊
+      window.speechSynthesis.cancel();
+      let msg = new SpeechSynthesisUtterance(txt);
+      msg.lang = 'en-US';
+      msg.pitch = 0.7;  // 較低的音調聽起來更像機械 AI
+      msg.rate = 0.9;   // 稍微慢一點的語速增加嚴肅感
+      msg.volume = 1.0;
+      window.speechSynthesis.speak(msg);
+    }
+
+    // 數位雨符號類別
+    class Symbol {
+      constructor(x, y, speed, first) {
+        this.x = x;
+        this.y = y;
+        this.value = '';
+        this.speed = speed;
+        this.first = first;
+        this.switchInterval = round(random(2, 20));
+      }
+      setToRandomSymbol() {
+        if (frameCount % this.switchInterval == 0) {
+          this.value = String.fromCharCode(0x30A0 + round(random(0, 96)));
+        }
+      }
+      rain() {
+        this.y = (this.y >= height) ? 0 : this.y + this.speed;
+      }
+    }
+
+    class Stream {
+      constructor() {
+        this.symbols = [];
+        this.totalSymbols = round(random(5, 30));
+        this.speed = random(5, 15);
+      }
+      generateSymbols(x, y) {
+        let first = round(random(0, 4)) == 1;
+        for (let i = 0; i <= this.totalSymbols; i++) {
+          let symbol = new Symbol(x, y, this.speed, first);
+          symbol.setToRandomSymbol();
+          this.symbols.push(symbol);
+          y -= symbolSize;
+          first = false;
+        }
+      }
+      render() {
+        this.symbols.forEach(s => {
+          isAuthorized ? fill(0, 255, 150, 180) : fill(0, 242, 255, 120);
+          if (s.first) fill(255);
+          text(s.value, s.x, s.y);
+          s.rain();
+          s.setToRandomSymbol();
+        });
+      }
+    }
+  </script>
+</body>
+</html>
