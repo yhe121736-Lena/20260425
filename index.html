@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Sketch</title>
+
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <!-- 引入太空感與科技感字體 -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+    <script src="libraries/p5.min.js"></script>
+    <script src="libraries/p5.sound.min.js"></script>
+    <script src="https://unpkg.com/ml5@1.2.1/dist/ml5.min.js"></script>
+  </head>
+
+  <body>
+    <!-- 主要的 p5.js 畫布會生成在這裡 -->
+    <script src="sketch.js"></script>
+
+    <!-- 作品展示區：使用 iframe 載入之前的作業 -->
+    <div id="gallery-container" style="position: fixed; width: 45%; height: 65%; background: rgba(0, 10, 20, 0.95); border: 1px solid #00f2ff; display: none; overflow: hidden; z-index: 100; box-shadow: 0 0 50px rgba(0, 242, 255, 0.2), inset 0 0 20px rgba(0, 242, 255, 0.1); backdrop-filter: blur(5px);">
+      <!-- 新增：拖動把手 -->
+      <div id="gallery-header" style="width: 100%; height: 30px; background: rgba(0, 242, 255, 0.3); cursor: move; display: flex; align-items: center; padding-left: 10px; color: white; font-family: 'Orbitron', sans-serif; font-size: 12px; border-bottom: 1px solid #00f2ff;">
+        🛰️ 遠端資料傳輸中... (按住此處拖動)
+      </div>
+      <iframe id="project-frame" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+      <button onclick="document.getElementById('gallery-container').style.display='none'" style="position: absolute; top: 5px; right: 5px; background: #ff0055; color: white; border: none; cursor: pointer;">關閉觀測窗</button>
+      <!-- 新增：調整大小把手 -->
+      <div id="resizer" style="width: 15px; height: 15px; background: #00f2ff; position: absolute; right: 0; bottom: 0; cursor: nwse-resize; z-index: 101; clip-path: polygon(100% 0, 100% 100%, 0 100%);"></div>
+    </div>
+
+    <!-- 心得與設計理念區 -->
+    <div id="reflection-box" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 80%; background: rgba(0, 15, 30, 0.85); color: #00f2ff; padding: 20px; font-family: 'Share Tech Mono', monospace; border-radius: 5px; border: 1px solid #00f2ff; box-shadow: 0 0 15px rgba(0, 242, 255, 0.3);">
+      <h3 style="font-family: 'Orbitron', sans-serif; letter-spacing: 2px; border-bottom: 1px solid #00f2ff; padding-bottom: 5px;">[ 任務日誌：系統狀態報告 ]</h3>
+      <p id="log-content" style="line-height: 1.6; min-height: 3em;"></p>
+    </div>
+  </body>
+</html>
